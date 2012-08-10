@@ -10,7 +10,7 @@ Author: Timothy Hobbs
 Maintainer: Timothy Hobbs <timothyhobbs@seznam.cz>
 build-type:Simple
 
-cabal-version: >= 1.4
+cabal-version: >= 1.6
 
 Executable haskarrowPrecompiler
  build-depends:base<5,
@@ -22,3 +22,8 @@ Executable haskarrowPrecompiler
                cmdargs    >=0.9.5
  Main-is: haskarrowPrecompiler.lhs
  Extensions: DoAndIfThenElse,DeriveDataTypeable
+
+source-repository head
+ type:    git 
+ location: https://github.com/timthelion/haskarrow.git
+

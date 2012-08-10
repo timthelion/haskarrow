@@ -245,7 +245,7 @@ Then we remove that IO and convert the toks into a string of code(getting rid of
 >mainCode :: Int -> String
 >mainCode topLevel = 
 > (replicate topLevel ' ') ++ "main :: IO ()\n"++
-> (replicate topLevel ' ')++"main = do initValues ; return ()\n"
+> (replicate topLevel ' ')++"main = do myValues <- initValues ; (exit myValues) ; return ()\n"
 
 >resolveDependencies :: [Value] -> Either [Value] Error
 >resolveDependencies values =
