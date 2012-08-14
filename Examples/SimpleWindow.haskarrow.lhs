@@ -9,7 +9,7 @@ The origional tutorial can be found here <http://projects.haskell.org/gtk2hs/doc
 >import Control.Concurrent
 >import Control.Concurrent.MVar
 >import Control.Monad.IO.Class
->import SimpleWindowActions
+
 
 >builder :: FilePath -> IO Builder
 >builder gladeFile << do
@@ -46,8 +46,8 @@ The origional tutorial can be found here <http://projects.haskell.org/gtk2hs/doc
 >  continueButton' <- builderGetObject builder castToButton "continueButton"
 >  return continueButton'
 
->continueButtonOnClick :: Button -> Label -> Entry ->  IO ()
->continueButtonOnClick continueButton label entry <<
+>continueButtonOnClick :: Button -> Label -> Entry -> UpdateLabelType ->  IO ()
+>continueButtonOnClick continueButton label entry updateLabel <<
 > postGUIAsync $ do
 >  continueButton `on` buttonActivated $ do
 >   liftIO $ do
@@ -60,14 +60,21 @@ The origional tutorial can be found here <http://projects.haskell.org/gtk2hs/doc
 >  label' <- builderGetObject builder castToLabel "label"
 >  return label'
 
+>type UpdateLabelType =  Entry -> Label -> IO ()
+>updateLabel :: UpdateLabelType
+>updateLabel entry label = do
+> name <- get entry entryText
+> set label [ labelText := "Hello " ++ name ]
+> return ()
+
 >entry :: Builder -> IO Entry
 >entry builder <<
 > postGUISync $ do
 >  entry' <- builderGetObject builder castToEntry "entry"
 >  return entry'
 
->entryOnKeyPress :: Entry -> Label -> IO ()
->entryOnKeyPress entry label << do
+>entryOnKeyPress :: Entry -> Label -> UpdateLabelType -> IO ()
+>entryOnKeyPress entry label updateLabel << do
 > postGUISync $ do
 >  entry `on` keyPressEvent $ do
 >   key  <- eventKeyName
