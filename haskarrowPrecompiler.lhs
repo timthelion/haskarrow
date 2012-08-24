@@ -26,16 +26,16 @@ require cmdargs
 >main = do 
 > args  <- cmdArgs haskarrowPrecompiler
 > if not ((null (inputFile args)) || (null (outputFile args)))
-> then preCompileToFile
->  (inputFile args)
->  (outputFile args)
-> else (
+>  then preCompileToFile
+>   (inputFile args)
+>   (outputFile args)
+>  else (
 
 If one file is given but not the other print an error...
 
->  if not ((null (inputFile args)) && (null (outputFile args)))
->  then print "Both an input AND output file must be specified to precompile."
->  else return ())
+>   if not ((null (inputFile args)) && (null (outputFile args)))
+>    then print "Both an input AND output file must be specified to precompile."
+>    else return ())
 
 > if Main.version args then print versionString else return()
 
