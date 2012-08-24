@@ -79,7 +79,7 @@
 > valuesDataConstructorName ++
 > (concatMap
 >  (\value ->
->    ' ':(valueName value))
+>    ' ':(valueName value) ++ internalInitializedValueSuffix)
 >  values) ++ "\n"
 
 ↑ And return all of our values in a giant data constructor ↑
@@ -283,11 +283,13 @@
 >    Static    -> " = "
 > in
 > (indentation (topLevel+1)) ++
-> name ++ operator ++
+> name ++ internalInitializedValueSuffix ++
+> operator ++
 > (name++valueSuffix) ++
 > (concatMap
 >  (\depend ->
->    ' ':depend ++ " ")
+>    ' ':depend ++
+>        internalInitializedValueSuffix ++ " ")
 >  depends) ++ "\n"
 
 >initValueCode
@@ -305,9 +307,12 @@
 >    Evaluated -> " <- "
 >    Static    -> " = "
 > in
-> (indentation (topLevel+1)) ++ name ++
+> (indentation (topLevel+1)) ++
+> name ++
+> internalInitializedValueSuffix ++
 > operator ++ "case " ++
->  name ++ "Parameter of Nothing -> " ++
+>  name ++ parameterSuffix ++
+>  " of Nothing -> " ++
 >   name ++ valueSuffix ++
 >   (concatMap
 >    (\depend ->
@@ -351,7 +356,7 @@
 >  =
 > indentation indent ++
 > optionalParametersEmpty ++ " = (" ++
-> optionalParametersDataConstructorName ++
+> optionalParametersDataConstructorName ++ " " ++
 > (unwords $
 >   replicate
 >    (length
@@ -372,6 +377,7 @@
 >  (requiredParameters values)
 >  indent
 >  requiredParametersDataConstructorName
+>  parameterSuffix
  
 >optionalParametersDataDeclaration ::
 > [Value] ->
@@ -385,6 +391,7 @@
 >  (optionalParameters values)
 >  indent
 >  optionalParametersDataConstructorName
+>  parameterSuffix 
 
 >valuesDataDeclaration ::
 > [Value] ->
@@ -398,6 +405,7 @@
 >  values
 >  indent
 >  valuesDataConstructorName
+>  ""
 
 >dataTypeDeclaration ::
 > [Value] ->
@@ -406,6 +414,8 @@
 > -- ^ Indentation level of the top level block.
 > String  ->
 > -- ^ Name of type and constructor.
+> String  ->
+> -- ^ Suffix of record sellectors.
 > String
 > -- ^ Source code of new constructor.
 > 
@@ -413,6 +423,7 @@
 > values
 > topLevel
 > name
+> suffix
 >  =
 > (replicate topLevel ' ') ++
 > "data " ++
@@ -434,9 +445,10 @@
 >       _
 >       _) ->
 >    ',' : (valueName ++
->          "::"      ++
->          valueName ++
->          internalValueTypeSuffix ++"\n"))
+>           suffix ++
+>           "::"      ++
+>           valueName ++
+>           internalValueTypeSuffix ++"\n"))
 >   values)++ " }\n")
 
 >mainCode ::
@@ -449,10 +461,15 @@
 > values
 >  = 
 > let
+>  numberOfRequiredParameters
+>    =
+>   length
+>    $ requiredParameters
+>       values
 >  numberOfOptionalParameters =
->   length $
->    optionalParameters
->     values
+>   length
+>    $ optionalParameters
+>       values
 
 ↓ A main statement is only generated if there are Evaluated values to be run, and there are no non-optional parameteres to initValues... Here we only need to check if there are non optional parameters, we checked for the need to evaluate above. ↓
 
@@ -468,10 +485,16 @@
 >   (replicate topLevel ' ') ++
 >   "main :: IO ()\n"++
 >   (replicate topLevel ' ') ++
->   "main = do myValues <- initValues " ++
+>   "main = do myValues <- initValues (" ++
+>   requiredParametersDataConstructorName ++ " " ++
+>   (unwords $
+>    take
+>     numberOfRequiredParameters $
+>     repeat "Nothing") ++ ")("
+>   ++ optionalParametersDataConstructorName ++ " " ++
 >   (unwords $
 >    take
 >     numberOfOptionalParameters $
 >     repeat "Nothing") ++
->   " ; (exit myValues) ; return ()\n"
+>   ") ; (exit myValues) ; return ()\n"
 >  else "{-NoMain-}"

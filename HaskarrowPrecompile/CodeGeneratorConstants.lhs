@@ -8,10 +8,6 @@ A main type+data constructor is then created, named "Values" which will hold the
 
 >valuesDataConstructorName = "Values"
 
-Within this data constructor, there are many records.  One record coresponds to one value.  Each value's name is suffixed with the string:
-
->recordSuffix = "Value"
-
 There are two more type+data constructors created:
 
 >requiredParametersDataConstructorName = "RequiredParameters"
@@ -40,10 +36,14 @@ The initValues function evaluates the EvaluatedValues in the haskarrow module in
 
 initValues :: IO Values
 initValues = do
- foo <- fooValue
- bar <- barValue
- foobar <- foobarValue foo bar
- 
+ foo_''_ <- fooValue
+ bar_''_ <- barValue
+ foobar_''_ <- foobarValue foo_''_ bar_''_
 
-A main statement is also generated if possible.  See "mainCode" bellow.
+The last suffix we have to worry about is the
 
+>internalInitializedValueSuffix = "_''_"
+
+which is suffixated onto values within the initValue function.
+
+A main statement is also generated if possible.

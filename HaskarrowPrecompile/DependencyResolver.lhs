@@ -6,7 +6,9 @@
 
 >resolveDependencies ::
 > [Value] ->
-> Either [Value] Error
+> Either
+>  Error
+>  [Value]
 
 >resolveDependencies
 > values
@@ -46,30 +48,14 @@ Don't be scared, we're just converting the Value's to tuples and back again, so 
 
 >  checkedDependsEither ::
 >   Either
->    [Value]
 >    Error
+>    [Value]
 
 >  checkedDependsEither =
->   let
-
-This is reversed because I didn't really undestand how to take advantage of liftM2 when I started this project, so I didn't put my Eithers in the right order.
-
->    reversedEither
->      =
->     sequence $
->      map
->       checkDepends
->       sortedValues
->   in
->   case reversedEither of
->    Left
->     error ->
->      Right
->       error
->    Right
->     value ->
->      Left
->       value
+>   sequence $
+>    map
+>     checkDepends
+>     sortedValues
 
 >  checkDepends ::
 >   Value ->

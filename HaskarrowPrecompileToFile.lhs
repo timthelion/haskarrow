@@ -7,7 +7,7 @@
 >preCompileToFile inputFile outputFile = do
 > input <- readFile inputFile
 > case precompile input inputFile of
->  Left output -> do
+>  Right output -> do
 >   fileExist <- doesFileExist outputFile
 >   oldOutput <- 
 >    if fileExist
@@ -21,5 +21,4 @@
 >     return ()
 >    else
 >     putStrLn $ "I'd rather die, than overwrite user generated content!  I didn't create your specified output file:" ++ outputFile ++ "\nPerhaps you have given the wrong output path?\n Quiting...\n(Dying *blegh*)"
->  Right error -> putStrLn error
-> return ()
+>  Left error -> putStrLn error
