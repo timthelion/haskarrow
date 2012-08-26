@@ -1,4 +1,4 @@
->module HaskarrowPrecompile.Types where
+>module Language.Haskarrow.Types where
 
 >data Value = Value {
 > valueName    :: String  ,

@@ -1,4 +1,4 @@
->module HaskarrowPrecompile.CodeGeneratorConstants where
+>module Language.Haskarrow.CodeGeneratorConstants where
 
 Haskarrow code preprocesses/precompiles to Haskell code.  In this process, all values are renamed, adding valueSuffix to the end:
 

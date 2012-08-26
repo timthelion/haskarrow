@@ -1,9 +1,9 @@
->module HaskarrowPrecompile.CodeGenerator where
+>module Language.Haskarrow.CodeGenerator where
 
 import Debug.Trace
 
->import HaskarrowPrecompile.Types
->import HaskarrowPrecompile.CodeGeneratorConstants
+>import Language.Haskarrow.Types
+>import Language.Haskarrow.CodeGeneratorConstants
 
 >import Language.Haskell.Her.HaLay
 

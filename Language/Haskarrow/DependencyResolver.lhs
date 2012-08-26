@@ -1,5 +1,5 @@
->module HaskarrowPrecompile.DependencyResolver where
->import HaskarrowPrecompile.Types
+>module Language.Haskarrow.DependencyResolver where
+>import Language.Haskarrow.Types
 
 >import Data.List
 >import Data.Graph

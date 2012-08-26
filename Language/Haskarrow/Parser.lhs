@@ -1,9 +1,9 @@
->module HaskarrowPrecompile.Parser where
+>module Language.Haskarrow.Parser where
 
 >import Debug.Trace
 
->import HaskarrowPrecompile.Types
->import HaskarrowPrecompile.CodeGeneratorConstants
+>import Language.Haskarrow.Types
+>import Language.Haskarrow.CodeGeneratorConstants
 
 >import Language.Haskell.Her.HaLay
 >import Language.Haskell.Her.FromClutterToLines

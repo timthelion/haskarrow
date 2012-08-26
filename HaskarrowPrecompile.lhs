@@ -1,9 +1,9 @@
 >module HaskarrowPrecompile where
 
->import HaskarrowPrecompile.DependencyResolver
->import HaskarrowPrecompile.Types
->import HaskarrowPrecompile.CodeGenerator
->import HaskarrowPrecompile.Parser
+>import Language.Haskarrow.DependencyResolver
+>import Language.Haskarrow.Types
+>import Language.Haskarrow.CodeGenerator
+>import Language.Haskarrow.Parser
 
 import Debug.Trace
 
