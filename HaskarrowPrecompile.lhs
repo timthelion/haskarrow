@@ -26,13 +26,18 @@ import Data.Graph
 ↓ Returns either HaskellCode OR AnError ↓
 
 >precompile ::
-> String ->
+> Bool     ->
+> String   ->
 > FilePath ->
 > Either
 >  Error
 >  String
 
->precompile origionalSource fileName =
+>precompile
+> concurrent
+> origionalSource
+> fileName
+>  =
 > let
 >  eitherValuesAndFunctionsOrAnError =
 >   expandFunctions origionalSource fileName
@@ -52,7 +57,11 @@ import Data.Graph
 >            (requiredParametersDataDeclaration values' topLevel) ++
 >            (optionalParametersDataDeclaration values' topLevel) ++
 >            (valuesDataDeclaration values' topLevel) ++
->            (generateInit evaluated values' topLevel) ++
+>            (if concurrent
+>              then
+>               (generateConcurrentInit evaluated values' topLevel)
+>              else
+>               (generateInit evaluated values' topLevel)) ++
 >            (if evaluated
 >              then
 >               (mainCode topLevel values')

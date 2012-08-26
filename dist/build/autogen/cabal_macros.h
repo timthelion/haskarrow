@@ -7,12 +7,12 @@
   (major1) == 4 && (major2) <  5 || \
   (major1) == 4 && (major2) == 5 && (minor) <= 1)
 
-/* package cmdargs-0.9.5 */
-#define VERSION_cmdargs "0.9.5"
+/* package cmdargs-0.10 */
+#define VERSION_cmdargs "0.10"
 #define MIN_VERSION_cmdargs(major1,major2,minor) (\
   (major1) <  0 || \
-  (major1) == 0 && (major2) <  9 || \
-  (major1) == 0 && (major2) == 9 && (minor) <= 5)
+  (major1) == 0 && (major2) <  10 || \
+  (major1) == 0 && (major2) == 10 && (minor) <= 0)
 
 /* package containers-0.4.2.1 */
 #define VERSION_containers "0.4.2.1"
@@ -42,10 +42,10 @@
   (major1) == 0 && (major2) <  1 || \
   (major1) == 0 && (major2) == 1 && (minor) <= 0)
 
-/* package split-0.1.4.3 */
-#define VERSION_split "0.1.4.3"
+/* package split-0.2.0.0 */
+#define VERSION_split "0.2.0.0"
 #define MIN_VERSION_split(major1,major2,minor) (\
   (major1) <  0 || \
-  (major1) == 0 && (major2) <  1 || \
-  (major1) == 0 && (major2) == 1 && (minor) <= 4)
+  (major1) == 0 && (major2) <  2 || \
+  (major1) == 0 && (major2) == 2 && (minor) <= 0)
 

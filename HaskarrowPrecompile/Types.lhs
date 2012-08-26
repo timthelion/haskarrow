@@ -5,6 +5,17 @@
 > valueDepends :: [String],
 > valueVariety :: ValueVariety} deriving (Show)
 
+>isCertainlyParametric ::
+> Value ->
+> Bool
+>isCertainlyParametric
+> value
+>  =
+>  CertainlyParametricValue
+>             ==
+>  (isParameter . valueVariety)
+>    value
+
 >data ValueVariety =
 > ValueVariety{
 >  evaluationType :: EvaluationType,

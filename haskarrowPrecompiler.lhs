@@ -6,9 +6,13 @@ require cmdargs
 >import HaskarrowPrecompileToFile
 
 >data HaskarrowPrecompilerOptions = HaskarrowPrecompilerOptions{
-> inputFile :: FilePath,
-> outputFile:: FilePath,
-> version   :: Bool}deriving(Data,Typeable)
+> inputFile  :: FilePath,
+> outputFile :: FilePath,
+> concurrent :: Bool,
+> version    :: Bool}
+> deriving
+>  (Data,
+>   Typeable)
 
 >haskarrowPrecompiler = HaskarrowPrecompilerOptions{
 > inputFile  =
@@ -16,6 +20,9 @@ require cmdargs
 
 > outputFile =
 >  def &= typFile &= name "o" &= help "The outputted .hs file.",
+
+> concurrent =
+>  def &= name "c" &= help "Generate concurrent haskell code?",
 
 > Main.version =
 >  def &= name "v" &= help "Print out haskarrow's version."
@@ -27,6 +34,7 @@ require cmdargs
 > args  <- cmdArgs haskarrowPrecompiler
 > if not ((null (inputFile args)) || (null (outputFile args)))
 >  then preCompileToFile
+>   (concurrent args)
 >   (inputFile args)
 >   (outputFile args)
 >  else (

@@ -3,10 +3,10 @@
 >import System.Directory
 >import HaskarrowPrecompile
 
->preCompileToFile :: FilePath -> FilePath -> IO ()
->preCompileToFile inputFile outputFile = do
+>preCompileToFile :: Bool -> FilePath -> FilePath -> IO ()
+>preCompileToFile concurrent inputFile outputFile = do
 > input <- readFile inputFile
-> case precompile input inputFile of
+> case precompile concurrent input inputFile of
 >  Right output -> do
 >   fileExist <- doesFileExist outputFile
 >   oldOutput <- 

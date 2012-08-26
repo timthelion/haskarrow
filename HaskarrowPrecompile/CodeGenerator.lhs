@@ -1,8 +1,14 @@
 >module HaskarrowPrecompile.CodeGenerator where
+
+import Debug.Trace
+
 >import HaskarrowPrecompile.Types
 >import HaskarrowPrecompile.CodeGeneratorConstants
+
 >import Language.Haskell.Her.HaLay
+
 >import Data.List.Split
+>import Data.List
 
 >indentation ::
 > Int    ->
@@ -27,18 +33,11 @@
 >       _)) -> evaluated == Evaluated)
 >  values
 
->generateInit ::
-> Bool    ->
-> -- ^ Evaluated? Is this to be an IO typed function?
+>initHeader ::
 > [Value] ->
-> -- ^ The values to be inintialized.
 > Int     ->
-> -- ^ The level of indentation in number of spaces.  No tabs please :P
 > String
-> -- ^ The source code we generated.
-
->generateInit
-> evaluated
+>initHeader
 > values
 > topLevel
 >  =
@@ -55,23 +54,28 @@
 > (indentation topLevel) ++
 > initValuesFunctionName ++ " (" ++
 > requiredParametersDataConstructorName ++ " " ++
-> (codifiedParameters $ requiredParameters values) ++ ") (" ++
+> (concatMap
+>  (\value ->
+>   (valueName value) ++
+>   valueSuffix ++
+>   " ")
+>  $ requiredParameters values) ++
+> ") (" ++
 > optionalParametersDataConstructorName ++ " " ++
-> (codifiedParameters $ optionalParameters values) ++ ") =" ++
+> (codifiedParameters $ optionalParameters values) ++ ") ="
 
 ↑ Insert the parameters ↑
 
-> (if evaluated
->  then " do\n"
->  else "\n") ++
-
-> (concatMap
->  (\group ->
->    valueGroupCode group topLevel) $
->  groupValuesByEvaluationType values) ++
-
-↑ Actually create the body of our function. ↑
-
+>initFooter ::
+> Bool ->
+> [Value] ->
+> Int ->
+> String
+>initFooter
+> evaluated
+> values
+> topLevel
+>  =
 > (indentation (topLevel+1)) ++
 > (if evaluated
 >   then "return $ "
@@ -84,6 +88,325 @@
 
 ↑ And return all of our values in a giant data constructor ↑
 
+
+>generateConcurrentInit ::
+> Bool    ->
+> -- ^ Evaluated? Is this to be an IO typed function?
+> [Value] ->
+> -- ^ The values to be inintialized.
+> Int     ->
+> -- ^ The level of indentation in number of spaces.  No tabs please :P
+> String
+> -- ^ The source code we generated.
+
+↓ We IO concurrency makes no sense without IO ↓
+
+>generateConcurrentInit
+> False
+> values
+> topLevel
+>  =
+> generateInit
+>  False
+>  values
+>  topLevel
+
+>generateConcurrentInit
+> _
+> values
+> topLevel
+>   =
+
+  let
+   values =
+    filter
+     (not . isCertainlyParametric)
+     values'
+  in
+
+>  (initHeader 
+>    values
+>    topLevel) ++
+>  "do\n" ++
+>   (concatMap
+>       (declareMVar
+>         (topLevel+1))
+>       values) ++
+>  (concatMap
+>   (concurrentValueGroupInit
+>    (topLevel+1))
+>   $ groupValuesByEvaluationType
+>      values) ++
+>  (concatMap
+>    (\depend ->
+>       (indentation
+>         (topLevel+1))++
+>       (concurrentDependRead
+>         depend)++
+>       "\n")
+>    (map
+>      valueName
+>      values))++
+>  (initFooter
+>    True
+>    values
+>    topLevel)
+
+>declareMVar ::
+> Int ->
+> Value ->
+> String
+
+>declareMVar
+> indent
+> (Value
+>   name
+>   _
+>   _)
+>  =
+> (indentation indent) ++
+> name ++
+> "MVar" ++
+> internalInitializedValueSuffix ++
+> " <- newEmptyMVar\n"
+
+>concurrentDependencyMVarReadingHeader ::
+> Int ->
+> [String] ->
+> String
+>concurrentDependencyMVarReadingHeader
+> indent
+> depends
+>  =
+> (indentation indent) ++
+> "_<-forkIO $ do{\n" ++
+> (concatMap
+>   (\depend ->
+>      (indentation
+>        (indent+1)) ++
+>      (concurrentDependRead
+>        depend)++
+>      ";\n")
+>   depends)
+
+>concatDepends ::
+> [Value] ->
+> [String]
+>concatDepends
+> values
+>  =
+> filter
+>  (\depend->
+>    not
+>     $ any
+>        (\value ->
+>           depend == valueName value)
+>        values)
+>  (nub
+>   $ concatMap
+>      valueDepends
+>      values)
+
+>staticValueInitCode ::
+> Value ->
+> String
+
+>staticValueInitCode
+> (Value
+>   name
+>   depends
+>   (ValueVariety
+>     _
+>     MaybeParametricValue))
+>   =
+> name ++
+> internalInitializedValueSuffix ++
+> " = (case " ++
+> name ++
+> parameterSuffix ++
+> " of Nothing -> " ++
+> name ++
+> valueSuffix ++
+> " " ++
+> (dependsAsParams
+>  depends) ++
+> " ; Just parameter_'_ -> parameter_'_)"
+
+>staticValueInitCode
+> (Value
+>   name
+>   depends
+>   _)
+>   =
+> name ++
+> internalInitializedValueSuffix ++
+> " = " ++
+> name ++
+> valueSuffix ++
+> " " ++
+> (dependsAsParams
+>  depends)
+
+>concurrentValueGroupInit ::
+> Int ->
+> EvaluationGroup ->
+> String
+
+>concurrentValueGroupInit
+> indent
+> (StaticGroup values)
+>  =
+> (concurrentDependencyMVarReadingHeader
+>   indent
+>   (concatDepends
+>      values)) ++
+> (indentation
+>   (indent + 1)) ++
+> "let\n" ++
+> (concatMap
+>   (\value ->
+>     (indentation
+>       (indent + 2)) ++
+>     (staticValueInitCode value) ++
+>     ";\n")
+>   values) ++
+> (indentation
+>   (indent + 1)) ++
+> "in do {\n" ++
+> (concatMap
+>  (\value ->
+>     (indentation
+>       (indent + 2)) ++
+>     ((mvarPutSequence . valueName)
+>        value) ++
+>     ";\n")
+>  values)++
+> (indentation
+>   (indent + 1)) ++
+> "}}\n"
+
+>concurrentValueGroupInit
+> indent
+> (EvaluatedGroup values)
+>  =
+> concatMap
+>  (concurrentEvaluatedValueInit
+>    indent)
+>  values
+
+>concurrentEvaluatedValueInit ::
+> Int ->
+> Value ->
+> String
+
+>concurrentEvaluatedValueInit
+> indent
+> (Value
+>  name
+>  depends
+>  (ValueVariety
+>    _
+>    parameter))
+>  =
+> (concurrentDependencyMVarReadingHeader
+>   indent
+>   depends) ++
+> (indentation
+>   (indent+1)) ++
+> name ++
+> internalInitializedValueSuffix ++
+> " <- " ++
+> (case parameter of
+>   InternalValue ->
+>    name ++
+>    valueSuffix ++
+>    " " ++
+>    (dependsAsParams
+>      depends)
+>   MaybeParametricValue ->
+>    " (case " ++
+>    name ++
+>    parameterSuffix ++
+>    " of Nothing -> " ++
+>    name ++
+>    valueSuffix ++
+>    " " ++
+>    (dependsAsParams
+>      depends) ++
+>    " ; Just parameter_'_ -> parameter_'_)") ++
+> " ;\n" ++
+> (indentation
+>   (indent + 1)) ++
+> (mvarPutSequence
+>  name)++
+> "}\n"
+
+>mvarPutSequence ::
+> String ->
+> String
+>mvarPutSequence
+> name
+>  =
+> "putMVar " ++
+> name ++
+> "MVar" ++
+> internalInitializedValueSuffix ++
+> " " ++
+> name ++
+> internalInitializedValueSuffix
+
+>concurrentDependRead ::
+> String ->
+> String
+>concurrentDependRead
+> depend
+>  =
+> depend ++
+> internalInitializedValueSuffix ++
+> " <- readMVar " ++
+> depend ++
+> "MVar" ++
+> internalInitializedValueSuffix
+
+>generateInit ::
+> Bool    ->
+> -- ^ Evaluated? Is this to be an IO typed function?
+> [Value] ->
+> -- ^ The values to be inintialized.
+> Int     ->
+> -- ^ The level of indentation in number of spaces.  No tabs please :P
+> String
+> -- ^ The source code we generated.
+>
+>generateInit
+> evaluated
+> values
+> topLevel
+>  =
+> (initHeader
+>  values
+>  topLevel) ++
+
+> (if evaluated
+>  then " do\n"
+>  else "\n") ++
+
+> (concatMap
+>  (\group ->
+>    valueGroupCode group topLevel) $
+>  groupValuesByEvaluationType
+>   $ filter
+>     (not . isCertainlyParametric)
+>     values) ++
+
+↑ Actually create the body of our function. ↑
+
+> (initFooter
+>   evaluated
+>   values
+>   topLevel)
+
+
 >codifiedParameters ::
 > [Value] ->
 > String
@@ -92,10 +415,10 @@
 > unwords $
 > map
 >  (\name ->
->   name ++ "Parameter") $
->  map 
->   valueName
->   values
+>   name ++ "Parameter")
+>  $ map 
+>     valueName
+>     values
  
 >optionalParameters ::
 > [Value] ->
@@ -245,7 +568,6 @@
 >  values) ++
 >  "-- End of evaluated group\n" 
 
-
 >valueGroupCode
 > (StaticGroup values)
 > indent
@@ -261,6 +583,18 @@
 >  values) ++
 > (indentation
 >   indent) ++ "\n"
+
+>dependsAsParams ::
+> [String] ->
+> String
+>dependsAsParams
+> depends
+>  =
+> concatMap
+>  (\depend ->
+>    ' ':depend ++
+>        internalInitializedValueSuffix ++ " ")
+>  depends
 
 >initValueCode ::
 > Value ->
@@ -286,11 +620,8 @@
 > name ++ internalInitializedValueSuffix ++
 > operator ++
 > (name++valueSuffix) ++
-> (concatMap
->  (\depend ->
->    ' ':depend ++
->        internalInitializedValueSuffix ++ " ")
->  depends) ++ "\n"
+> (dependsAsParams
+>   depends) ++ "\n"
 
 >initValueCode
 > (Value
@@ -474,11 +805,9 @@
 ↓ A main statement is only generated if there are Evaluated values to be run, and there are no non-optional parameteres to initValues... Here we only need to check if there are non optional parameters, we checked for the need to evaluate above. ↓
 
 >  canMakeMain =
->   null $
->    filter
->     (\value ->
->       isParameter (valueVariety value) == CertainlyParametricValue)
->     values
+>   null
+>    $ requiredParameters
+>       values
 > in
 > if canMakeMain
 >  then
@@ -486,11 +815,7 @@
 >   "main :: IO ()\n"++
 >   (replicate topLevel ' ') ++
 >   "main = do myValues <- initValues (" ++
->   requiredParametersDataConstructorName ++ " " ++
->   (unwords $
->    take
->     numberOfRequiredParameters $
->     repeat "Nothing") ++ ")("
+>   requiredParametersDataConstructorName ++ ")("
 >   ++ optionalParametersDataConstructorName ++ " " ++
 >   (unwords $
 >    take
