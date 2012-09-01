@@ -24,7 +24,9 @@ library
   base       < 5   ,
   her-lexer  >=0.1 ,
   split      >=0   ,
-  cpphs      >=1.13
+  cpphs      >=1.13,
+  errors     >0
+ Extensions: NamedFieldPuns,EmptyDataDecls, GADTs, EmptyDataDecls
  
 Executable haskarrowPrecompiler
  build-depends:
@@ -33,7 +35,7 @@ Executable haskarrowPrecompiler
   directory  >=1.1,
   cmdargs    >=0.9.5
  Main-is: haskarrowPrecompiler.lhs
- Extensions: DeriveDataTypeable
+ Extensions: DeriveDataTypeable, GADTs
 
 source-repository head
  type:    git 

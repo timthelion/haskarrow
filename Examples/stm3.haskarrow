@@ -1,0 +1,154 @@
+>import Control.Concurrent.STM.TChan
+>import Control.Concurrent.STM
+>import Control.Concurrent
+>import Control.Concurrent.MVar
+>import System.Exit
+>import Control.Concurrent.STM.LoudObject
+
+>foo1Object ::  IO (LoudObject Int)
+>foo1Object << newLoudObject 0
+
+>foo2Object :: IO (LoudObject Int)
+>foo2Object << newLoudObject 0
+
+>foo3Object :: IO (LoudObject Int)
+>foo3Object << newLoudObject 0
+
+>foo4Object :: IO (LoudObject Int)
+>foo4Object << newLoudObject 0
+
+>fooDisplay
+> exitMVar
+
+    <!>
+
+> foo1Object
+> foo2Object
+> foo3Object
+> foo4Object
+>  <<
+> (withLoudObjectS
+>   foo1Object
+>   (foosDisplayer
+>      draw))
+>   >>=
+> (withLoudObjectS
+>   foo2Object)
+>   >>=
+> (withLoudObjectS
+>   foo3Object)
+>   >>=
+> (withLoudObjectS
+>   foo4Object)
+>   >>=
+> forkIO
+> where
+> foosDisplayer
+>  drawer
+>  foo1SObject
+>  foo2SObject
+>  foo3SObject
+>  foo4SObject
+>    =
+>  do
+>   ( foo1SObjectA,
+>    (foo2SObjectA,
+>    (foo3SObjectA,
+>     foo4SObjectA)))
+>    <- atomically
+>       $ awaitUpdate $
+>        ((readLoudObjectSQue foo1SObject)
+>                      <|&|>
+>        ((readLoudObjectSQue foo2SObject)
+>                      <|&|>
+>        ((readLoudObjectSQue foo3SObject)
+>                      <|&|>
+>         (readLoudObjectSQue foo4SObject))))
+
+>   (drawA,contA) <-
+>    apply foo1SObjectA (drawer,(foosDisplayer drawer)) >>=
+>    apply foo2SObjectA      >>=
+>    apply foo3SObjectA      >>=
+>    apply foo4SObjectA
+>   drawA
+>   contA
+
+> apply :: IO (LoudObjectS a) -> ((a -> b),((LoudObjectS a) -> d)) -> IO (b,d) 
+> apply mySObjectA (f,cont) = do
+>   mySObject <- mySObjectA
+>   return ((f.lov) mySObject,cont mySObject)
+
+> draw foo1 foo2 foo3 foo4 =
+>   case foo1 of
+>    10 ->
+>     putMVar
+>      exitMVar
+>      ExitSuccess
+>    _ ->
+>     putStrLn
+>      $ "Foo1: "    ++
+>        (show foo1) ++
+>        "\nFoo2: "  ++
+>        (show foo2) ++
+>        "\nFoo3: "  ++
+>        (show foo3) ++
+>        "\nFoo4: "  ++
+>        (show foo4)
+
+>fooRead
+> fooReader
+>  <<
+> forkIO $ do
+>  fooReader
+
+>fooReader
+> foo1Object
+> foo2Object
+> foo3Object
+> foo4Object
+> fooReader
+>   =
+> do
+>  newFoo <- getLine
+>  case newFoo of
+>   ('1':_) ->
+>    modifyLoudObject
+>     foo1Object
+>     (\n -> n + 1)
+>   ('2':_) ->
+>    modifyLoudObject
+>     foo2Object
+>     (\n -> n + 1)
+>   ('3':_) ->
+>    modifyLoudObject
+>     foo3Object
+>     (\n -> n + 1)
+>   ('4':_) ->
+>    modifyLoudObject
+>     foo4Object
+>     (\n -> n + 1)
+>   _ -> return () 
+>  fooReader
+
+>exitMVar ::
+> IO
+>  (MVar
+>    ExitCode)
+
+>exitMVar
+>  <<
+> newEmptyMVar
+
+
+>exit ::
+> MVar
+>  ExitCode ->
+> IO(IO())
+
+>exit
+> exitMVar
+> <<
+> return
+>  ((takeMVar
+>    exitMVar) >>
+>  (return ()))

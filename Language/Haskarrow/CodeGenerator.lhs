@@ -1,4 +1,15 @@
->module Language.Haskarrow.CodeGenerator where
+>{-# LANGUAGE GADTs #-}
+
+>module Language.Haskarrow.CodeGenerator
+> (areAnyValuesToBeEvaluated         ,
+>  optionalParametersEmptyCode       ,
+>  requiredParametersDataDeclaration ,
+>  optionalParametersDataDeclaration ,
+>  valuesDataDeclaration             ,
+>  generateConcurrentInit            ,
+>  generateInit                      ,
+>  mainCode)
+> where
 
 import Debug.Trace
 
@@ -19,24 +30,25 @@ import Debug.Trace
 > replicate indent ' '
 
 >areAnyValuesToBeEvaluated ::
-> [Value] ->
+> [Value Resolved Resolved] ->
 > Bool
+
 >areAnyValuesToBeEvaluated
 > values
 >  =
 > any
->  (\(Value
->      _
->      _
->      (ValueVariety
->       evaluated
->       _)) -> evaluated == Evaluated)
+>  (\Value
+>      {valueVariety =
+>        ValueVariety{
+>         evaluationType=evaluated}}
+>    -> evaluated == Evaluated)
 >  values
 
 >initHeader ::
-> [Value] ->
+> [Value Resolved Resolved] ->
 > Int     ->
 > String
+
 >initHeader
 > values
 > topLevel
@@ -68,9 +80,10 @@ import Debug.Trace
 
 >initFooter ::
 > Bool ->
-> [Value] ->
+> [Value Resolved Resolved] ->
 > Int ->
 > String
+
 >initFooter
 > evaluated
 > values
@@ -92,7 +105,7 @@ import Debug.Trace
 >generateConcurrentInit ::
 > Bool    ->
 > -- ^ Evaluated? Is this to be an IO typed function?
-> [Value] ->
+> [Value Resolved Resolved] ->
 > -- ^ The values to be inintialized.
 > Int     ->
 > -- ^ The level of indentation in number of spaces.  No tabs please :P
@@ -154,15 +167,13 @@ import Debug.Trace
 
 >declareMVar ::
 > Int ->
-> Value ->
+> (Value Resolved Resolved) ->
 > String
 
 >declareMVar
 > indent
-> (Value
->   name
->   _
->   _)
+> Value{
+>  valueName=name}
 >  =
 > (indentation indent) ++
 > name ++
@@ -174,6 +185,7 @@ import Debug.Trace
 > Int ->
 > [String] ->
 > String
+
 >concurrentDependencyMVarReadingHeader
 > indent
 > depends
@@ -190,7 +202,7 @@ import Debug.Trace
 >   depends)
 
 >concatDepends ::
-> [Value] ->
+> [Value Resolved Resolved] ->
 > [String]
 >concatDepends
 > values
@@ -204,20 +216,19 @@ import Debug.Trace
 >        values)
 >  (nub
 >   $ concatMap
->      valueDepends
+>      (resolvedDepends . valueDepends)
 >      values)
 
 >staticValueInitCode ::
-> Value ->
+> (Value Resolved Resolved) ->
 > String
 
 >staticValueInitCode
-> (Value
->   name
->   depends
->   (ValueVariety
->     _
->     MaybeParametricValue))
+> Value{
+>   valueName=name,
+>   valueDepends=(ResolvedDepends depends),
+>   valueVariety=ValueVariety{
+>     isParameter=MaybeParametricValue}}
 >   =
 > name ++
 > internalInitializedValueSuffix ++
@@ -233,10 +244,9 @@ import Debug.Trace
 > " ; Just parameter_'_ -> parameter_'_)"
 
 >staticValueInitCode
-> (Value
->   name
->   depends
->   _)
+> Value{
+>   valueName=name,
+>   valueDepends=(ResolvedDepends depends)}
 >   =
 > name ++
 > internalInitializedValueSuffix ++
@@ -296,17 +306,16 @@ import Debug.Trace
 
 >concurrentEvaluatedValueInit ::
 > Int ->
-> Value ->
+> (Value Resolved Resolved) ->
 > String
 
 >concurrentEvaluatedValueInit
 > indent
-> (Value
->  name
->  depends
->  (ValueVariety
->    _
->    parameter))
+> Value{
+>  valueName=name,
+>  valueDepends=(ResolvedDepends depends),
+>  valueVariety=ValueVariety{
+>    isParameter=parameter}}
 >  =
 > (concurrentDependencyMVarReadingHeader
 >   indent
@@ -344,6 +353,7 @@ import Debug.Trace
 >mvarPutSequence ::
 > String ->
 > String
+
 >mvarPutSequence
 > name
 >  =
@@ -358,6 +368,7 @@ import Debug.Trace
 >concurrentDependRead ::
 > String ->
 > String
+
 >concurrentDependRead
 > depend
 >  =
@@ -371,7 +382,7 @@ import Debug.Trace
 >generateInit ::
 > Bool    ->
 > -- ^ Evaluated? Is this to be an IO typed function?
-> [Value] ->
+> [Value Resolved Resolved] ->
 > -- ^ The values to be inintialized.
 > Int     ->
 > -- ^ The level of indentation in number of spaces.  No tabs please :P
@@ -406,9 +417,8 @@ import Debug.Trace
 >   values
 >   topLevel)
 
-
 >codifiedParameters ::
-> [Value] ->
+> [Value Resolved Resolved] ->
 > String
 >codifiedParameters
 > values =
@@ -421,23 +431,26 @@ import Debug.Trace
 >     values
  
 >optionalParameters ::
-> [Value] ->
-> [Value]
+> [Value Resolved Resolved] ->
+> [Value Resolved Resolved]
+
 >optionalParameters values =
 > parameters
 >  MaybeParametricValue
 >  values
 
 >requiredParameters ::
-> [Value] ->
-> [Value]
+> [Value Resolved Resolved] ->
+> [Value Resolved Resolved]
+
 >requiredParameters values =
 > parameters CertainlyParametricValue values
 
 >parameters ::
 > IsParameter ->
-> [Value]     ->
-> [Value]
+> [Value Resolved Resolved]     ->
+> [Value Resolved Resolved]
+
 >parameters
 > parameterType
 > values
@@ -454,26 +467,22 @@ import Debug.Trace
 >  values
 
 >data EvaluationGroup =
-> EvaluatedGroup [Value] |
-> StaticGroup    [Value] 
+> EvaluatedGroup [Value Resolved Resolved] |
+> StaticGroup    [Value Resolved Resolved] 
 
 >groupValuesByEvaluationType ::
-> [Value] ->
+> [Value Resolved Resolved] ->
 > [EvaluationGroup]
 
 >groupValuesByEvaluationType
 > (value:values)
 >  =
 > case valueVariety value of
->  (ValueVariety
->    Evaluated
->    _) -> 
+>  ValueVariety{evaluationType = Evaluated}-> 
 >   gatherEvaluatedGroup
 >    values
 >    [value]
->  (ValueVariety
->    Static
->    _) ->
+>  ValueVariety{evaluationType = Static} ->
 >   gatherStaticGroup
 >    values
 >    [value]
@@ -484,9 +493,9 @@ import Debug.Trace
 > []
 
 >gatherEvaluatedGroup ::
-> [Value] ->
+> [Value Resolved Resolved] ->
 > -- ^ Unsorted values.
-> [Value] ->
+> [Value Resolved Resolved] ->
 > -- ^ Evaluated Values
 > [EvaluationGroup]
 
@@ -495,15 +504,11 @@ import Debug.Trace
 > inGroupAlready
 >  =
 > case valueVariety value of
->  (ValueVariety
->   Evaluated
->   _) ->
+>  ValueVariety{evaluationType = Evaluated} ->
 >    gatherEvaluatedGroup
 >     values
 >     (inGroupAlready ++ [value])
->  (ValueVariety
->   Static
->   _) ->
+>  ValueVariety{evaluationType = Static} ->
 >    (EvaluatedGroup
 >      inGroupAlready):
 >       gatherStaticGroup
@@ -517,9 +522,9 @@ import Debug.Trace
 > [EvaluatedGroup inGroupAlready]
 
 >gatherStaticGroup ::
-> [Value] ->
+> [Value Resolved Resolved] ->
 > -- ^ Unsorted values.
-> [Value] ->
+> [Value Resolved Resolved] ->
 > -- ^ Static Values
 > [EvaluationGroup]
 
@@ -528,15 +533,11 @@ import Debug.Trace
 > inGroupAlready
 >  =
 > case valueVariety value of
->  (ValueVariety
->   Static
->   _) ->
+>  ValueVariety{evaluationType=Static} ->
 >    gatherStaticGroup
 >     values
 >     (inGroupAlready ++ [value])
->  (ValueVariety
->   Evaluated
->   _) ->
+>  ValueVariety{evaluationType=Evaluated} ->
 >    (StaticGroup
 >      inGroupAlready):
 >       gatherEvaluatedGroup
@@ -587,6 +588,7 @@ import Debug.Trace
 >dependsAsParams ::
 > [String] ->
 > String
+
 >dependsAsParams
 > depends
 >  =
@@ -597,17 +599,17 @@ import Debug.Trace
 >  depends
 
 >initValueCode ::
-> Value ->
+> (Value Resolved Resolved) ->
 > Int   ->
 > String
 
 >initValueCode
-> (Value
->   name
->   depends
->   (ValueVariety
->     evaluationType
->     InternalValue))
+> Value{
+>   valueName=name,
+>   valueDepends=(ResolvedDepends depends),
+>   valueVariety=ValueVariety{
+>     evaluationType=evaluationType,
+>     isParameter=InternalValue}}
 > topLevel
 >  =
 > let
@@ -624,12 +626,12 @@ import Debug.Trace
 >   depends) ++ "\n"
 
 >initValueCode
-> (Value
->  name
->  depends
->  (ValueVariety
->    evaluationType
->    MaybeParametricValue))
+> Value{
+>  valueName=name,
+>  valueDepends=(ResolvedDepends depends),
+>  valueVariety=ValueVariety{
+>    evaluationType=evaluationType,
+>    isParameter=MaybeParametricValue}}
 > topLevel
 >  =
 > let
@@ -656,12 +658,12 @@ import Debug.Trace
 >    depends) ++ "\n"
 
 >initValueCode
-> (Value
->   name
->   depends
->   (ValueVariety
->    evaluationType
->    CertainlyParametricValue))
+> Value{
+>   valueName=name,
+>   valueDepends=(ResolvedDepends depends),
+>   valueVariety=ValueVariety{
+>    evaluationType=evaluationType,
+>    isParameter=CertainlyParametricValue}}
 > topLevel
 >  =
 > let
@@ -678,9 +680,10 @@ import Debug.Trace
 >  depends) ++ "\n"
 
 >optionalParametersEmptyCode ::
-> [Value] ->
+> [Value Resolved Resolved] ->
 > Int     ->
 > String
+
 >optionalParametersEmptyCode
 > values
 > indent
@@ -697,9 +700,10 @@ import Debug.Trace
 > ++ ")\n" 
 
 >requiredParametersDataDeclaration ::
-> [Value] ->
+> [Value Resolved Resolved] ->
 > Int     ->
 > String
+
 >requiredParametersDataDeclaration
 > values
 > indent
@@ -711,7 +715,7 @@ import Debug.Trace
 >  parameterSuffix
  
 >optionalParametersDataDeclaration ::
-> [Value] ->
+> [Value Resolved Resolved] ->
 > Int     ->
 > String
 >optionalParametersDataDeclaration
@@ -725,7 +729,7 @@ import Debug.Trace
 >  parameterSuffix 
 
 >valuesDataDeclaration ::
-> [Value] ->
+> [Value Resolved Resolved] ->
 > Int ->
 > String
 >valuesDataDeclaration
@@ -736,10 +740,10 @@ import Debug.Trace
 >  values
 >  indent
 >  valuesDataConstructorName
->  ""
+>  valueRecordSuffix
 
 >dataTypeDeclaration ::
-> [Value] ->
+> [Value Resolved Resolved] ->
 > -- ^ Values to be represented.
 > Int     ->
 > -- ^ Indentation level of the top level block.
@@ -760,31 +764,27 @@ import Debug.Trace
 > "data " ++
 > name ++ " " ++
 > (concatMap
->   (\value@(Value
->       valueName
->       _
->       _) ->
->    " "++valueName++internalValueTypeSuffix)
+>   (\value ->
+>    " "++
+>    (valueName value)++
+>    internalValueTypeSuffix)
 >   values) ++
 > " = " ++
 > name ++" {\n" ++
 
 > (tail
 >  $(concatMap
->   (\value@(Value
->       valueName
->       _
->       _) ->
->    ',' : (valueName ++
->           suffix ++
+>   (\value ->
+>    ',' : ((valueName value) ++
+>           suffix    ++
 >           "::"      ++
->           valueName ++
+>           (valueName value) ++
 >           internalValueTypeSuffix ++"\n"))
 >   values)++ " }\n")
 
 >mainCode ::
 > Int ->
-> [Value] ->
+> [Value Resolved Resolved] ->
 > String
 
 >mainCode
@@ -821,5 +821,5 @@ import Debug.Trace
 >    take
 >     numberOfOptionalParameters $
 >     repeat "Nothing") ++
->   ") ; (exit myValues) ; return ()\n"
+>   ") ; (exitValue myValues) ; return ()\n"
 >  else "{-NoMain-}"

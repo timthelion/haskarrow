@@ -8,6 +8,8 @@ A main type+data constructor is then created, named "Values" which will hold the
 
 >valuesDataConstructorName = "Values"
 
+>valueRecordSuffix = "Value"
+
 There are two more type+data constructors created:
 
 >requiredParametersDataConstructorName = "RequiredParameters"
