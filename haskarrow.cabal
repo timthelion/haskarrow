@@ -19,13 +19,15 @@ library
   Language.Haskarrow.CodeGeneratorConstants
   Language.Haskarrow.Types
   Language.Haskarrow.DependencyResolver
+  Control.Concurrent.STM.LoudObject
 
  build-depends:
   base       < 5   ,
   her-lexer  >=0.1 ,
   split      >=0   ,
   cpphs      >=1.13,
-  errors     >0
+  errors     >0    ,
+  stm        >=2.4
  Extensions: NamedFieldPuns,EmptyDataDecls, GADTs, EmptyDataDecls
  
 Executable haskarrowPrecompiler

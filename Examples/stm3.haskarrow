@@ -1,99 +1,371 @@
+>{-# LANGUAGE TupleSections #-}
 >import Control.Concurrent.STM.TChan
 >import Control.Concurrent.STM
 >import Control.Concurrent
 >import Control.Concurrent.MVar
 >import System.Exit
+>import Control.Monad
 >import Control.Concurrent.STM.LoudObject
 
->foo1Object ::  IO (LoudObject Int)
->foo1Object << newLoudObject 0
+>source1 :: IO (LoudSource Int)
+>source1 << newLoudSource' (SourceID 0) 0
 
->foo2Object :: IO (LoudObject Int)
->foo2Object << newLoudObject 0
+>source2 :: IO (LoudSource Int)
+>source2 << newLoudSource' (SourceID 1) 0
 
->foo3Object :: IO (LoudObject Int)
->foo3Object << newLoudObject 0
+Listen to:
 
->foo4Object :: IO (LoudObject Int)
->foo4Object << newLoudObject 0
+Sources -- 
+Source specific, blocking, read cases.
+
+Touch chan,
+All influences -- Joint case which flushes everything.
+
+
+>listener1 :: LoudSource Int -> LoudSource Int -> IO (LoudListener Int)
+>listener1
+
+   <!>
+
+> source1
+> source2 <<
+> do
+>  self <- newLoudListener
+>  (withLoudSource
+>    source1
+>    (thisListener
+>      self))
+>     >>=
+>   (withLoudSource
+>    source2)
+>     >>=
+>   forkIO
+>  return self
+> where
+>  draw val1 val2 = do
+>   return $ val1+val2
+
+>  thisListener
+>   self
+>   (mySource1,source1Val)
+>   (mySource2,source2Val)
+>      =
+>   do
+>    ((draw source1Val source2Val)
+>         >>=
+>      (setLoudListenerValue self))
+
+>    (beenReadChan, updatedSources)
+>      <- atomically
+>           (do{ 
+>             r <- readTChan $ updatesChan mySource1;
+>             return (sourceID mySource1,r)}
+>                     `orElse`
+>            do{
+>             r<-readTChan $ updatesChan mySource2;
+>             return (sourceID mySource2,r)}
+>                     `orElse`
+>             (listenForTouch self))
+
+>    case (beenReadChan, updatedSources) of
+
+>      ((SourceID (-1),_)) -> do
+>        thisListener
+>         self
+>         (mySource1,source1Val)
+>         (mySource2,source2Val)
+
+>      ((SourceID 0), LoudSourceUpdate [(SourceID 0), (SourceID 1)]) -> do
+>        (val1,val2) <- atomically $ do
+>         _<-readTChan $ updatesChan mySource2
+>         val1 <- readTChan $ valuesChan mySource1
+>         val2 <- readTChan $ valuesChan mySource2
+>         return $ (val1,val2)
+>        thisListener
+>         self
+>         (mySource1,val1)
+>         (mySource2,val2)
+
+>      ((SourceID 1), LoudSourceUpdate [(SourceID 0), (SourceID 1)]) -> do
+>        (val1,val2) <- atomically $ do
+>         _<-readTChan $ updatesChan mySource1
+>         val1 <- readTChan $ valuesChan mySource1
+>         val2 <- readTChan $ valuesChan mySource2
+>         return $ (val1,val2)
+>        thisListener
+>         self
+>         (mySource1,val1)
+>         (mySource2,val2)
+
+>      ((SourceID 1), LoudSourceUpdate [(SourceID 1)]) -> do
+>        (val1,val2) <- atomically $ do
+>         val1 <- return source1Val
+>         val2 <- readTChan $ valuesChan mySource2
+>         return $ (val1,val2)
+>        thisListener
+>         self
+>         (mySource1,val1)
+>         (mySource2,val2)
+
+>      ((SourceID 0), LoudSourceUpdate [(SourceID 0)]) -> do
+>        (val1,val2) <- atomically $ do
+>         val1 <- readTChan $ valuesChan mySource1
+>         val2 <- return source2Val
+>         return $ (val1,val2)
+>        thisListener
+>         self
+>         (mySource1,val1)
+>         (mySource2,val2)
+
+>listener2 :: LoudSource Int -> LoudSource Int -> LoudListener Int -> IO (LoudListener Int)
+
+>listener2
+> source1
+> source2
+
+   <!>
+
+> listener1
+>  <<
+> do
+>  self <- newLoudListener
+>  (withLoudSource
+>    source1
+>    (thisListener
+>      self))
+>     >>=
+>   (withLoudSource
+>     source2)
+>     >>=
+>   (withLoudListener
+>     listener1)
+>     >>=
+>   forkIO
+>  return self
+> where
+>  draw lval1 =do
+>   return $ lval1*lval1
+>  thisListener
+>   self
+>   (mySource1,_)
+>   (mySource2,_)
+>   (myListener1,listener1Val)
+>      =
+>   do
+>    ((draw listener1Val)
+>      >>=
+>     (setLoudListenerValue self))
+>    (beenReadChan, updatedSources)
+>      <- atomically
+>          ((do{
+>           r <- readTChan $ updatesChan mySource1;
+>           return (sourceID mySource1,r)})
+>                  `orElse`
+>          (do{
+>           r<-readTChan $ updatesChan mySource2;
+>           return (sourceID mySource2,r)})
+>                   `orElse`
+>           (listenForTouch self)
+>                   `orElse`
+>           (peekInfluence myListener1))
+
+>    case (beenReadChan, updatedSources) of
+
+>      ((SourceID (-1)),_) -> do
+>        listener1Val' <-
+>          flushTChan
+>           (listenerValuesChan myListener1)
+>           listener1Val
+>        thisListener
+>         self
+>         (mySource1,undefined)
+>         (mySource2,undefined)
+>         (myListener1,listener1Val')
+
+>      ((SourceID 0), LoudSourceUpdate [(SourceID 0),(SourceID 1)]) -> do
+>        listener1Val' <- atomically $ do
+>         _<-readTChan $ updatesChan mySource2
+>         listener1Val'' <- readTChan $ listenerValuesChan myListener1
+>         return listener1Val''
+>        thisListener
+>         self
+>         (mySource1,undefined)
+>         (mySource2,undefined)
+>         (myListener1,listener1Val')
+
+>      ((SourceID 1), LoudSourceUpdate [(SourceID 0),(SourceID 1)]) -> do
+>        (listener1Val') <- atomically $ do
+>         _<-readTChan $ updatesChan mySource1
+>         listener1Val'' <- readTChan $ listenerValuesChan myListener1
+>         return listener1Val''
+>        thisListener
+>         self
+>         (mySource1,undefined)
+>         (mySource2,undefined)
+>         (myListener1,listener1Val')
+
+>      ((SourceID 1), LoudSourceUpdate [(SourceID 1)]) -> do
+>        (listener1Val') <- atomically $ do
+>         listener1Val'' <- readTChan $ listenerValuesChan myListener1
+>         return listener1Val''
+>        thisListener
+>         self
+>         (mySource1,undefined)
+>         (mySource2,undefined)
+>         (myListener1,listener1Val')
+
+>      ((SourceID 0), LoudSourceUpdate [(SourceID 0)]) -> do
+>        (listener1Val') <- atomically $ do
+>         listener1Val'' <- readTChan $ listenerValuesChan myListener1
+>         return listener1Val''
+>        thisListener
+>         self
+>         (mySource1,undefined)
+>         (mySource2,undefined)
+>         (myListener1,listener1Val')
+
 
 >fooDisplay
 > exitMVar
 
     <!>
 
-> foo1Object
-> foo2Object
-> foo3Object
-> foo4Object
+> source1
+> source2
+> listener1
+> listener2
 >  <<
-> (withLoudObjectS
->   foo1Object
->   (foosDisplayer
->      draw))
->   >>=
-> (withLoudObjectS
->   foo2Object)
->   >>=
-> (withLoudObjectS
->   foo3Object)
->   >>=
-> (withLoudObjectS
->   foo4Object)
->   >>=
-> forkIO
+> do
+>  self <- newLoudListener
+>  (withLoudSource
+>    source1
+>    (thisListener
+>      self))
+>     >>=
+>   (withLoudSource
+>     source2)
+>     >>=
+>   (withLoudListener
+>     listener1)
+>     >>=
+>   (withLoudListener
+>     listener2)
+>     >>=
+>   forkIO
+>  return self
 > where
-> foosDisplayer
->  drawer
->  foo1SObject
->  foo2SObject
->  foo3SObject
->  foo4SObject
->    =
->  do
->   ( foo1SObjectA,
->    (foo2SObjectA,
->    (foo3SObjectA,
->     foo4SObjectA)))
->    <- atomically
->       $ awaitUpdate $
->        ((readLoudObjectSQue foo1SObject)
->                      <|&|>
->        ((readLoudObjectSQue foo2SObject)
->                      <|&|>
->        ((readLoudObjectSQue foo3SObject)
->                      <|&|>
->         (readLoudObjectSQue foo4SObject))))
+>  thisListener
+>   self
+>   (mySource1,source1Val)
+>   (mySource2,source2Val)
+>   (myListener1,listener1Val)
+>   (myListener2,listener2Val)
+>      =
+>   do
+>    (draw source1Val source2Val listener1Val listener2Val)
+>      >>=
+>     (setLoudListenerValue self)
+>    (beenReadChan, updatedSources)
+>       <- atomically
+>         (((sourceID mySource1,) `fmap` (readTChan $ updatesChan mySource1))
+>                      `orElse`
+>         ((sourceID mySource2,) `fmap` (readTChan $ updatesChan mySource2))
+>                      `orElse`
+>         (listenForTouch self)
+>                      `orElse`
+>         (peekInfluence myListener1)
+>                      `orElse`
+>         (peekInfluence myListener2))
 
->   (drawA,contA) <-
->    apply foo1SObjectA (drawer,(foosDisplayer drawer)) >>=
->    apply foo2SObjectA      >>=
->    apply foo3SObjectA      >>=
->    apply foo4SObjectA
->   drawA
->   contA
+>    case (beenReadChan, updatedSources) of
 
-> apply :: IO (LoudObjectS a) -> ((a -> b),((LoudObjectS a) -> d)) -> IO (b,d) 
-> apply mySObjectA (f,cont) = do
->   mySObject <- mySObjectA
->   return ((f.lov) mySObject,cont mySObject)
 
-> draw foo1 foo2 foo3 foo4 =
->   case foo1 of
+>      ((SourceID (-1)),_) -> do
+>        listener1Val' <- flushTChan
+>         (listenerValuesChan myListener1)
+>         listener1Val
+>        listener2Val' <- flushTChan
+>         (listenerValuesChan myListener2)
+>         listener2Val
+>        thisListener
+>         self
+>         (mySource1,source1Val)
+>         (mySource2,source2Val)
+>         (myListener1,listener1Val')
+>         (myListener2,listener2Val')
+
+>      ((SourceID 0), LoudSourceUpdate [(SourceID 0), (SourceID 1)]) -> do
+>        (source1Val',source2Val',listener1Val',listener2Val') <- atomically $ do
+>         _<-readTChan $ updatesChan mySource2
+>         source1Val'' <- readTChan $ valuesChan mySource1
+>         source2Val'' <- readTChan $ valuesChan mySource2
+>         listener1Val'' <- readTChan $ listenerValuesChan myListener1
+>         listener2Val'' <- readTChan $ listenerValuesChan myListener2
+>         return (source1Val'',source2Val'',listener1Val'',listener2Val'')
+>        thisListener
+>         self
+>         (mySource1,source1Val')
+>         (mySource2,source2Val')
+>         (myListener1,listener1Val')
+>         (myListener2,listener2Val')
+
+>      ((SourceID 1), LoudSourceUpdate [(SourceID 0),(SourceID 1)]) -> do
+>        (source1Val',source2Val',listener1Val',listener2Val') <- atomically $ do
+>         _<-readTChan $ updatesChan mySource1
+>         source1Val'' <- readTChan $ valuesChan mySource1
+>         source2Val'' <- readTChan $ valuesChan mySource2
+>         listener1Val'' <- readTChan $ listenerValuesChan myListener1
+>         listener2Val'' <- readTChan $ listenerValuesChan myListener2
+>         return (source1Val'',source2Val'',listener1Val'',listener2Val'')
+>        thisListener
+>         self
+>         (mySource1,source1Val')
+>         (mySource2,source2Val')
+>         (myListener1,listener1Val')
+>         (myListener2,listener2Val')
+
+>      ((SourceID 0), LoudSourceUpdate [(SourceID 0)]) -> do
+>        (source1Val',source2Val',listener1Val',listener2Val') <- atomically $ do
+>         source1Val'' <- readTChan $ valuesChan mySource1
+>         listener1Val'' <- readTChan $ listenerValuesChan myListener1
+>         listener2Val'' <- readTChan $ listenerValuesChan myListener2
+>         return (source1Val'',source2Val,listener1Val'',listener2Val'')
+>        thisListener
+>         self
+>         (mySource1,source1Val')
+>         (mySource2,source2Val)
+>         (myListener1,listener1Val')
+>         (myListener2,listener2Val')
+
+>      ((SourceID 1), LoudSourceUpdate [(SourceID 1)]) -> do
+>        (source1Val',source2Val',listener1Val',listener2Val') <- atomically $ do
+>         source2Val'' <- readTChan $ valuesChan mySource2
+>         listener1Val'' <- readTChan $ listenerValuesChan myListener1
+>         listener2Val'' <- readTChan $ listenerValuesChan myListener2
+>         return (source1Val,source2Val'',listener1Val'',listener2Val'')
+>        thisListener
+>         self
+>         (mySource1,source1Val)
+>         (mySource2,source2Val')
+>         (myListener1,listener1Val')
+>         (myListener2,listener2Val')
+
+>  draw source1 source2 listener1 listener2 =
+>   case source1 of
 >    10 ->
 >     putMVar
 >      exitMVar
 >      ExitSuccess
 >    _ ->
 >     putStrLn
->      $ "Foo1: "    ++
->        (show foo1) ++
->        "\nFoo2: "  ++
->        (show foo2) ++
->        "\nFoo3: "  ++
->        (show foo3) ++
->        "\nFoo4: "  ++
->        (show foo4)
+>      $ "Source1: "    ++
+>        (show source1) ++
+>        "\nSource2: "  ++
+>        (show source2) ++
+>        "\nSource1+2: "  ++
+>        (show listener1) ++
+>        "\n(Source1+2)^2: "  ++
+>        (show listener2)
 
 >fooRead
 > fooReader
@@ -102,32 +374,41 @@
 >  fooReader
 
 >fooReader
-> foo1Object
-> foo2Object
-> foo3Object
-> foo4Object
+> source1
+> source2
 > fooReader
 >   =
 > do
 >  newFoo <- getLine
 >  case newFoo of
->   ('1':_) ->
->    modifyLoudObject
->     foo1Object
->     (\n -> n + 1)
+>   ('1':'2':_) ->
+>    doLoudSourceModification $
+>     (modifyLoudSource
+>      source1
+>      (\n -> n + 1)):
+>     (modifyLoudSource
+>      source2
+>      (\n -> n + 1)):[]
+>   ('2':'1':_) ->
+>    doLoudSourceModification $
+>     (modifyLoudSource
+>      source2
+>      (\n -> n + 1)):
+>     (modifyLoudSource
+>      source1
+>      (\n -> n + 1)):[]
+>   ('1':_) -> do
+>    doLoudSourceModification $
+>     (modifyLoudSource
+>      source1
+>      (\n -> n + 1)):[]
 >   ('2':_) ->
->    modifyLoudObject
->     foo2Object
->     (\n -> n + 1)
->   ('3':_) ->
->    modifyLoudObject
->     foo3Object
->     (\n -> n + 1)
->   ('4':_) ->
->    modifyLoudObject
->     foo4Object
->     (\n -> n + 1)
+>    doLoudSourceModification $
+>     (modifyLoudSource
+>      source2
+>      (\n -> n + 1)):[]
 >   _ -> return () 
+
 >  fooReader
 
 >exitMVar ::
@@ -138,7 +419,6 @@
 >exitMVar
 >  <<
 > newEmptyMVar
-
 
 >exit ::
 > MVar

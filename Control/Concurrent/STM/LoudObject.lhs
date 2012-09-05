@@ -1,107 +1,164 @@
+>{-# LANGUAGE NamedFieldPuns #-}
 >module Control.Concurrent.STM.LoudObject where
 
+>import Control.Concurrent
 >import Control.Concurrent.STM.TChan
 >import Control.Concurrent.STM
 >import Control.Concurrent.MVar
+>import Data.List (sortBy)
 
 >newtype SourceID = SourceID Int
+> -- ^ SourceID -1 is reserved for the case of a touch or another event which would cause a flush of an objects influence channels.
 
->newtype SourceObject a = (SourceID ,TChan LoudObjectSourceUpdate, TChan a, MVar a)
+>data LoudSource a = LoudSource{
+> sourceID         :: SourceID                     ,
+> updatesChan      :: TChan LoudSourceUpdate       ,
+> valuesChan       :: TChan a                      ,
+> currentValueMVar :: MVar a}
 
->newtype UpdateID = UpdateID Int
+>data LoudSourceUpdate = LoudSourceUpdate{
+> updatedSources :: [SourceID]}
 
->newtype LoudObjectSourceUpdate = (UpdateID,[SourceID])
+>data LoudListener a = LoudListener{
+> listenerValuesChan :: TChan a,
+> listenerTouchChan  :: TChan ()}
 
->type LoudObject a = (TChan a,MVar a)
-
->newtype LoudObjectS a =
-> LoudObjectS (TChan a, MVar a, Maybe a)
-
->lov :: LoudObjectS a -> a
->lov (LoudObjectS (_,_,Just v))  = v
->lov (LoudObjectS (_,_,Nothing)) =
-> error "State of this Loud Object has not been initialized."
-
->newLoudObject
->  ::
+>newLoudSource ::
+> MVar SourceID ->
+> -- ^ This is our global ID counter. OMG mutability when it's not necessary...  <-- We're acutally less likely to encounter bugs using mutability here than using some kind of imutable state.  We want to be SURE we have a global effect and that the ID's are globally unique(Global as in, to the extent of our haskarrow module).
 > a ->
-> IO
->  (LoudObject a)
+> -- ^ Initial value of our loud source.
+> IO (LoudSource a)
 
->newLoudObject
+>newLoudSource
+> idCounterMVar
 > initialValue
 >  =
 > do
->  tchan <- newTChanIO
->  mvar  <- newMVar initialValue
->  atomically
->   $ writeTChan tchan initialValue
->  return (tchan, mvar)
+>  mySourceID <-
+>   modifyMVar
+>    idCounterMVar
+>    (\(SourceID id)->return (SourceID (id+1),SourceID id))
+>  newLoudSource'
+>   mySourceID
+>   initialValue
 
->readLoudObjectSQue
->  ::
-> LoudObjectS a ->
-> (STM (IO (LoudObjectS a)),IO (LoudObjectS a))
-
->readLoudObjectSQue
-> los@(LoudObjectS (tchan,mvar,maybeValue))
+>newLoudSource'
+> nextID
+> initialValue
 >  =
-> (case maybeValue of
->      Just _ -> do
->       v <- readTChan tchan;
->       return (return $ LoudObjectS (tchan,mvar,Just v))
->      Nothing ->
->       return grabValueFromMVar,
->  case maybeValue of
->   Just v  -> return los
->   Nothing -> grabValueFromMVar)
-> where
->  grabValueFromMVar =
->   do
->    v <- readMVar mvar
->    return $ LoudObjectS (tchan,mvar,Just v)
+> do
+>  myValuesChan <-
+>   newBroadcastTChanIO
 
->modifyLoudObject
+>  updatesChan <-
+>   newBroadcastTChanIO
+
+>  myCurrentValueMVar <-
+>   newMVar initialValue
+
+>  return $
+>   LoudSource{
+>    sourceID         = nextID        ,
+>    updatesChan      = updatesChan   ,
+>    valuesChan       = myValuesChan  ,
+>    currentValueMVar = myCurrentValueMVar
+>    }
+
+>newLoudListener ::
+> IO (LoudListener a)
+>newLoudListener
+>  =
+> do
+>  vchan <- 
+>   newBroadcastTChanIO
+>  touchChan <-
+>   newTChanIO
+>  return $ LoudListener vchan touchChan
+
+>setLoudListenerValue ::
+> LoudListener a ->
+> a ->
+> IO ()
+
+>setLoudListenerValue
+> (LoudListener tchan _)
+> value
+>  =
+> do
+>  atomically
+>   $ do
+>     writeTChan
+>      tchan
+>      value
+
+>doLoudSourceModification
 >  ::
-> LoudObject a ->
+> [(SourceID,[SourceID]->IO())] ->
+> IO ()
+>doLoudSourceModification
+> pairs
+>  =
+> let
+>  (ids,updates)=unzip pairs
+>  sortedIDs =
+>   sortBy
+>    (\(SourceID id) (SourceID id1)-> id `compare` id1)
+>    ids
+> in do
+> mapM
+>  (\update ->
+>     update sortedIDs)
+>  updates
+> return ()
+
+>modifyLoudSource
+>  ::
+> LoudSource a ->
 > (a -> a)     ->
-> IO ()
+> (SourceID, [SourceID] ->IO ())
 
->modifyLoudObject
-> (tchan,mvar)
+>modifyLoudSource
+> loudSource
 > f
->  = do
-> v <- takeMVar mvar
-> v' <- return $ f v ;
-> atomically
->  $ writeTChan
->     tchan
->     v'
-> putMVar mvar v'
+>  =
+> modifyLoudSourceIO loudSource (\x -> return $ f x)
 
->modifyLoudObjectIO
+>modifyLoudSourceIO
 >  ::
-> LoudObject a ->
-> (a -> IO a)  ->
-> IO ()
+> LoudSource a ->
+> (a -> IO a)     ->
+> (SourceID, [SourceID] ->IO ())
 
->modifyLoudObjectIO
-> (tchan,mvar)
+>modifyLoudSourceIO
+> LoudSource{
+>  sourceID         = sourceID         ,
+>  updatesChan      = updatesChan      ,
+>  valuesChan       = valuesChan       ,
+>  currentValueMVar = currentValueMVar
+>  }
 > f
->  = do
-> v <- takeMVar mvar
+>  = 
+> (sourceID,
+> (\sources -> do
+> v <- takeMVar currentValueMVar
 > v' <- f v ;
 > atomically
->  $ writeTChan
->     tchan
->     v'
-> putMVar mvar v'
+>  $ do
+>     writeTChan
+>      valuesChan
+>      v'
+>     writeTChan
+>      updatesChan
+>      (LoudSourceUpdate sources)
+> putMVar currentValueMVar v'))
 
 >withTChan
 >  ::
 > TChan a         ->
 > (TChan a -> b)  ->
 > IO b
+
 >withTChan
 > tchan
 > f
@@ -113,70 +170,120 @@
 >  return
 >   $ f dupedChan
 
->withLoudObjectS
+>withLoudSource
 >  ::
-> LoudObject a          ->
-> (LoudObjectS a -> d)  ->
+> LoudSource a             ->
+> ((LoudSource a,a) -> d)  ->
 > IO d
 
->withLoudObjectS
-> (tchan,mvar)
+>withLoudSource
+> LoudSource{
+>  sourceID         = sourceID         ,
+>  updatesChan      = updatesChan      ,
+>  valuesChan       = valuesChan       ,
+>  currentValueMVar = currentValueMVar
+>  }
 > f
 >   =
 > do
->  dupedChan
+
+>  dupedUpdatesChan
+>    <- atomically
+>        $ dupTChan updatesChan
+
+>  dupedValuesChan
+>    <- atomically
+>        $ dupTChan valuesChan
+
+>  currentValue <-
+>   readMVar currentValueMVar
+
+>  return
+>   $ f (LoudSource {
+>         sourceID         = sourceID         ,
+>         updatesChan      = dupedUpdatesChan ,
+>         valuesChan       = dupedValuesChan  ,
+>         currentValueMVar = currentValueMVar
+>         },
+>        currentValue)
+
+>withLoudListener
+>   ::
+> LoudListener a ->
+> ((LoudListener a,a) -> b) ->
+> IO b
+
+>withLoudListener
+> ll@(LoudListener tchan touchChan)
+> f
+>  =
+> do
+>  dupedListenerChan
 >    <- atomically
 >        $ dupTChan tchan
+
+>  touchLoudListener ll;
+
+>  currentValue <- atomically
+>   $ readTChan
+>      dupedListenerChan;
+
 >  return
->   $ f (LoudObjectS (dupedChan,mvar,Nothing))
+>   $ f (LoudListener dupedListenerChan touchChan,currentValue)
 
->stmStateOnion
->  ::
-> (STM   a  )->
-> a          ->
-> (STM   b  )->
-> b          ->
-> (STM  (a,b),(a,b))
+>touchLoudListener ::
+> LoudListener a ->
+> IO ()
+>touchLoudListener
+> (LoudListener _ touchChan)
+>  =
+> atomically
+>  $ writeTChan
+>     touchChan
+>     ()
 
->stmStateOnion
-> stm1
-> oldVal1
-> stm2
-> prevTup
->   =
-> (((do 
->   val1' <- stm1
->   return (val1',prevTup)) 
->    `orElse` 
->  (do 
->   val2' <- stm2
->   return
->    (oldVal1,val2'))),
->  (oldVal1,prevTup))
+>listenForTouch ::
+> LoudListener a ->
+> STM (SourceID,LoudSourceUpdate)
+>listenForTouch
+> (LoudListener _ touchChan)
+>  =
+> packTouch $ readTChan touchChan
 
->awaitUpdate
->  ::
-> (STM a,b) ->
-> STM a
+>peekInfluence ::
+> LoudListener a ->
+> STM (SourceID,LoudSourceUpdate)
+>peekInfluence
+> (LoudListener vChan _)
+>  =
+> packTouch
+>  $ peekTChan vChan
 
->awaitUpdate
-> (stm,_)
->   =
+>packTouch ::
+> STM a ->
+> STM (SourceID,LoudSourceUpdate)
+>packTouch
 > stm
+>  =
+> do
+>  _ <- stm
+>  return (SourceID (-1),LoudSourceUpdate [SourceID (-1)])
 
->(<|&|>)
->  ::
-> (STM a,a) ->
-> (STM b,b) ->
-> (STM (a,b),(a,b))
-
->(<|&|>)
-> (thisSTM,oldValue)
-> (prevSTM,prevSTMTup)
->   =
-> stmStateOnion
->  thisSTM
->  oldValue
->  prevSTM
->  prevSTMTup
-
+> -- | If the TChan has contents, empty it.  Return either the last value put into the TChan or the constant value given.
+>flushTChan ::
+> TChan a ->
+> a       ->
+> IO a
+>flushTChan
+> tchan
+> oldValue
+>  =
+> do
+>  result <- atomically
+>   $ tryReadTChan tchan
+>  case result of
+>   Just newValue ->
+>    flushTChan
+>     tchan
+>     newValue
+>   Nothing -> return oldValue
