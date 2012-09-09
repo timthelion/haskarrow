@@ -24,10 +24,23 @@
 > UnresolvedInfluences ::
 >  {unresolvedInfluences :: [String]} -> Influences Unresolved
 
+>sourceName
+>  ::
+> Influence ->
+> String
+>sourceName
+> (Influence (Source (_,name)) _)
+>  =
+> name
+
 >data Influence = Influence {
->  sourceName          :: String,
+>  source              :: Source,
 >  dependentInfluences :: [String]
 > }
+
+>newtype Source = Source (SourceID,String)
+
+>newtype SourceID = SourceID Int
 
 >isCertainlyParametric ::
 > Value a a ->
@@ -42,20 +55,30 @@
 
 >data ValueVariety =
 > ValueVariety{
->  evaluationType :: EvaluationType,
->  isParameter    :: IsParameter}
+>  evaluationType   :: EvaluationType,
+>  timeOfEvaluation :: TimeOfEvaluation,
+>  isParameter      :: IsParameter}
 >  deriving(Show,Eq)
 
->data EvaluationType = LoudObject | Evaluated | Static
+>data EvaluationType = Evaluated | Static
+> deriving (Show,Eq)
+
+>data TimeOfEvaluation =
+>   DeReEval
+> | DeReReEval
 > deriving (Show,Eq)
 
 >data IsParameter =
 > InternalValue        |
 > MaybeParametricValue |
-> CertainlyParametricValue     
+> CertainlyParametricValue
 >  deriving (Show,Eq)
 
 >type Dependency = String
 >type ValueName  = String
 
 >type Error = String
+
+>newtype Indentation = Indentation String deriving (Eq)
+
+>type Code=String

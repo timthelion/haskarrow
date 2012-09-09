@@ -15,7 +15,7 @@
 
 Listen to:
 
-Sources -- 
+Sources --
 Source specific, blocking, read cases.
 
 Touch chan,
@@ -57,7 +57,7 @@ All influences -- Joint case which flushes everything.
 
 >    (beenReadChan, updatedSources)
 >      <- atomically
->           (do{ 
+>           (do{
 >             r <- readTChan $ updatesChan mySource1;
 >             return (sourceID mySource1,r)}
 >                     `orElse`
@@ -278,7 +278,6 @@ All influences -- Joint case which flushes everything.
 >         (peekInfluence myListener2))
 
 >    case (beenReadChan, updatedSources) of
-
 
 >      ((SourceID (-1)),_) -> do
 >        listener1Val' <- flushTChan

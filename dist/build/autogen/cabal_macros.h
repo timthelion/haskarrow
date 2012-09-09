@@ -42,12 +42,12 @@
   (major1) == 1 && (major2) <  3 || \
   (major1) == 1 && (major2) == 3 && (minor) <= 1)
 
-/* package her-lexer-0.1 */
-#define VERSION_her_lexer "0.1"
+/* package her-lexer-0.1.1 */
+#define VERSION_her_lexer "0.1.1"
 #define MIN_VERSION_her_lexer(major1,major2,minor) (\
   (major1) <  0 || \
   (major1) == 0 && (major2) <  1 || \
-  (major1) == 0 && (major2) == 1 && (minor) <= 0)
+  (major1) == 0 && (major2) == 1 && (minor) <= 1)
 
 /* package split-0.2.0.0 */
 #define VERSION_split "0.2.0.0"

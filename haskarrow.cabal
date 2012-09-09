@@ -1,7 +1,7 @@
 Name: haskarrow
 Version: 0.1
 Synopsis: A dialect of haskell with order of execution based on dependency resolution(DEREVAL)
-Description: This haskell preprocessor will allow you to write "haskarrow" code.  Haskarrow is a semi-impertive language.  In a normal imperitive language evaluation happens top to bottom.  In haskarrow, each command is given a set of dependencies.  Commands are then excecuted in order of dependency resolution(DEREVAL). Those commands that have the fewest dependencies comming before those with the most.  The same haskarrow code may be compiled for either linear or concurrent execution.
+Description: This haskell preprocessor will allow you to write "haskarrow" code.  Haskarrow is a data flow language.  In a normal imperitive language evaluation happens top to bottom.  In haskarrow, each command is given a set of dependencies.  Commands are then excecuted in order of dependency resolution(DEREVAL). Those commands that have the fewest dependencies comming before those with the most. Haskarrow may also do dependency resolution based re-evaluation(DeReReEval).  This means that when you have a large dependency graph, and the value of one node changes, rather than re-evaluating the entire graph, all you have to re-evaluate are the effected nodes.
 Category:Language
 
 License: GPL-3
@@ -15,8 +15,12 @@ cabal-version: >= 1.6
 library
  exposed-modules:
   Language.Haskarrow.Parser
-  Language.Haskarrow.CodeGenerator
-  Language.Haskarrow.CodeGeneratorConstants
+  Language.Haskarrow.CodeGenerator.Constants
+  Language.Haskarrow.CodeGenerator.GeneralFunctions
+  Language.Haskarrow.CodeGenerator.ConcurrentInit
+  Language.Haskarrow.CodeGenerator.LoudObjectCode
+  Language.Haskarrow.CodeGenerator.SequentialInit
+  Language.Haskarrow.ResolveLoudSources
   Language.Haskarrow.Types
   Language.Haskarrow.DependencyResolver
   Control.Concurrent.STM.LoudObject

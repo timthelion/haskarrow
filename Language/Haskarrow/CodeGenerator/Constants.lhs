@@ -1,4 +1,4 @@
->module Language.Haskarrow.CodeGeneratorConstants where
+>module Language.Haskarrow.CodeGenerator.Constants where
 
 Haskarrow code preprocesses/precompiles to Haskell code.  In this process, all values are renamed, adding valueSuffix to the end:
 
@@ -49,3 +49,13 @@ The last suffix we have to worry about is the
 which is suffixated onto values within the initValue function.
 
 A main statement is also generated if possible.
+
+Other constants:
+
+When generating the concurrent init, the mvars are suffixed with:
+
+>concurrentInitMVarSuffix = "MVar__''__"
+
+Furthermore. When generating listeners for derereeval code the listener functions are suffixed with:
+
+>derereevalListenerSuffix = "Listener_''_"
