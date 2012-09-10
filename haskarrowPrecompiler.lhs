@@ -4,11 +4,12 @@ require cmdargs
 >import System.IO
 >import System.Console.CmdArgs.Implicit
 >import HaskarrowPrecompileToFile
+>import Language.Haskarrow.Types
 
 >data HaskarrowPrecompilerOptions = HaskarrowPrecompilerOptions{
 > inputFile  :: FilePath,
 > outputFile :: FilePath,
-> concurrent :: Bool,
+> sequential :: Bool,
 > version    :: Bool}
 > deriving
 >  (Data,
@@ -21,8 +22,8 @@ require cmdargs
 > outputFile =
 >  def &= typFile &= name "o" &= help "The outputted .hs file.",
 
-> concurrent =
->  def &= name "c" &= help "Generate concurrent haskell code?",
+> sequential =
+>  def &= name "s" &= help "Generate sequential init? Maybe faster or slower.",
 
 > Main.version =
 >  def &= name "v" &= help "Print out haskarrow's version."
@@ -30,11 +31,13 @@ require cmdargs
 > } &= help "Precompile a haskarrow file to .hs"
 
 >main :: IO()
->main = do 
+>main = do
 > args  <- cmdArgs haskarrowPrecompiler
 > if not ((null (inputFile args)) || (null (outputFile args)))
 >  then preCompileToFile
->   (concurrent args)
+>   (case (sequential args) of
+>     True  -> Sequential
+>     False -> Concurrent)
 >   (inputFile args)
 >   (outputFile args)
 >  else (

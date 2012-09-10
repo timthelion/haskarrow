@@ -2,14 +2,15 @@
 >import System.IO
 >import System.Directory
 >import HaskarrowPrecompile
+>import Language.Haskarrow.Types
 
->preCompileToFile :: Bool -> FilePath -> FilePath -> IO ()
->preCompileToFile concurrent inputFile outputFile = do
+>preCompileToFile :: EvaluationStyle -> FilePath -> FilePath -> IO ()
+>preCompileToFile initEvaluationStyle inputFile outputFile = do
 > input <- readFile inputFile
-> case precompile concurrent input inputFile of
+> case precompile initEvaluationStyle input inputFile of
 >  Right output -> do
 >   fileExist <- doesFileExist outputFile
->   oldOutput <- 
+>   oldOutput <-
 >    if fileExist
 >     then do
 >      withFile outputFile ReadMode hGetLine

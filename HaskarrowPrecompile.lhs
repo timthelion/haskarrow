@@ -32,15 +32,15 @@ import Data.Graph
 ↓ Returns either HaskellCode OR AnError ↓
 
 >precompile ::
-> Bool     ->
-> String   ->
-> FilePath ->
+> EvaluationStyle ->
+> String          ->
+> FilePath        ->
 > Either
 >  Error
 >  String
 
 >precompile
-> concurrent
+> initEvaluationStyle
 > origionalSource
 > fileName
 >  =
@@ -63,10 +63,11 @@ import Data.Graph
 >           (requiredParametersDataDeclaration valuesRR indent) ++
 >           (optionalParametersDataDeclaration valuesRR indent) ++
 >           (valuesDataDeclaration valuesRR indent) ++
->           (if concurrent
->             then
+>           (loudObjectListenerFunctionsCode valuesRR indent)++
+>           (case initEvaluationStyle of
+>             Concurrent ->
 >              (generateConcurrentInit evaluationType valuesRR indent)
->             else
+>             Sequential ->
 >              (generateSequentialInit evaluationType valuesRR indent)) ++
 >           (case evaluationType of
 >             Evaluated ->

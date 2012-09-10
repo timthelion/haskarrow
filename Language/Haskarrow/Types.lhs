@@ -60,8 +60,12 @@
 >  isParameter      :: IsParameter}
 >  deriving(Show,Eq)
 
+> -- | EvaluationType refers to the way values are evaluated.
 >data EvaluationType = Evaluated | Static
 > deriving (Show,Eq)
+
+> -- | EvaluationStyle refers to the way the init sequence is evaluated.
+>data EvaluationStyle = Concurrent | Sequential
 
 >data TimeOfEvaluation =
 >   DeReEval

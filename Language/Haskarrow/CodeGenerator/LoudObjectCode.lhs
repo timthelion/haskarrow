@@ -3,17 +3,17 @@
 >import Language.Haskarrow.CodeGenerator.GeneralFunctions
 >import Data.List
 
->loudObjectListenerFunctionCodes ::
+>loudObjectListenerFunctionsCode ::
 > [Value Resolved Resolved] ->
 > Indentation               ->
 > Code
 
->loudObjectListenerFunctionCodes
+>loudObjectListenerFunctionsCode
 > ((Value{
 >   valueName=name,
 >   listenerInfluences=(ResolvedInfluences influences),
 >   valueVariety=ValueVariety{
->                 timeOfEvaluation=DeReReEval}}):_)
+>                 timeOfEvaluation=DeReReEval}}):vs)
 > indent
 >  =
 > "\n"++
@@ -73,16 +73,17 @@
 > "(listenForTouch self_'_)"++
 > (listenSourcesAndPeekInfluencesCode indent influences)++
 > ")\n"++
-> (continuationCasesCode indent influences)
+> (continuationCasesCode indent influences)++
+> (loudObjectListenerFunctionsCode vs indent)
 
->loudObjectListenerFunctionCodes
+>loudObjectListenerFunctionsCode
 > (_:los)
 > indent
 >  =
 > "\n"++
-> (loudObjectListenerFunctionCodes los indent)
+> (loudObjectListenerFunctionsCode los indent)
 
->loudObjectListenerFunctionCodes
+>loudObjectListenerFunctionsCode
 > []
 > _
 >  =
