@@ -14,7 +14,8 @@
 > sourceID         :: SourceID                     ,
 > updatesChan      :: TChan LoudSourceUpdate       ,
 > valuesChan       :: TChan a                      ,
-> currentValueMVar :: MVar a}
+> currentValueMVar :: MVar a                       ,
+> syncOnGet        :: a -> IO a                    }
 
 >data LoudSourceUpdate = LoudSourceUpdate{
 > updatedSources :: [SourceID]}
@@ -26,13 +27,13 @@
 >newLoudSource ::
 > MVar SourceID ->
 > -- ^ This is our global ID counter. OMG mutability when it's not necessary...  <-- We're acutally less likely to encounter bugs using mutability here than using some kind of imutable state.  We want to be SURE we have a global effect and that the ID's are globally unique(Global as in, to the extent of our haskarrow module).
-> a ->
+> (a->IO a,a) ->
 > -- ^ Initial value of our loud source.
 > IO (LoudSource a)
 
 >newLoudSource
 > idCounterMVar
-> initialValue
+> (mySyncOnGet,initialValue)
 >  =
 > do
 >  mySourceID <-
@@ -41,11 +42,16 @@
 >    (\(SourceID id)->return (SourceID (id+1),SourceID id))
 >  newLoudSource'
 >   mySourceID
->   initialValue
+>   (mySyncOnGet,initialValue)
 
 >newLoudSource'
+>  ::
+> SourceID ->
+> (a -> IO a , a) ->
+> IO (LoudSource a)
+>newLoudSource'
 > nextID
-> initialValue
+> (mySyncOnGet,initialValue)
 >  =
 > do
 >  myValuesChan <-
@@ -62,26 +68,26 @@
 >    sourceID         = nextID        ,
 >    updatesChan      = updatesChan   ,
 >    valuesChan       = myValuesChan  ,
->    currentValueMVar = myCurrentValueMVar
->    }
+>    currentValueMVar = myCurrentValueMVar,
+>    syncOnGet        = mySyncOnGet}
 
 >newLoudListener ::
 > IO (LoudListener a)
 >newLoudListener
 >  =
 > do
->  vchan <- 
+>  vchan <-
 >   newBroadcastTChanIO
 >  touchChan <-
 >   newTChanIO
 >  return $ LoudListener vchan touchChan
 
->setLoudListenerValue ::
+>unsafeDoNotUseSetLoudListenerValue ::
 > LoudListener a ->
 > a ->
 > IO ()
 
->setLoudListenerValue
+>unsafeDoNotUseSetLoudListenerValue
 > (LoudListener tchan _)
 > value
 >  =
@@ -91,6 +97,38 @@
 >     writeTChan
 >      tchan
 >      value
+
+>newtype LoudSourceModification
+>  =
+> LoudSourceModification [(SourceID, [SourceID] ->IO ())]
+
+>instance Monad LoudSourceModification where
+> return a = LoudSourceModification [a]
+> a >>= (LoudSourceModification f) = LoudSourceModification (a:f)
+
+> -- | When you do a loud source modification, you pass it a list of SourceID, update action pairs.  These pairs are created by modifyLoudSource and modifyLoudSourceIO.  If you are passing a list of such pairs that you already know is sorted by the SourceID value, then you can use this function.  It is faster, because it does not need to sort the values itself.  If you pass it an unsorted list however, your program will crash.  An exception will be thrown in a thread belonging to some random loud listener.  You do not want do debug that!  So when in doubt use the normal doLoudSourceMdificatino!.
+>unsafeUnsortedDoLoudSourceModification
+>  ::
+> [(SourceID,[SourceID]->IO())] ->
+> IO ()
+>unsafeUnsortedDoLoudSourceModification
+> pairs
+>  =
+> let
+>  (ids,updates)=unzip pairs
+> in
+> unsafeUnsortedDoLoudSourceModificationInternal
+>  ids
+>  updates
+
+>unsafeUnsortedDoLoudSourceModificationInternal
+> ids
+> updates
+>  =
+> mapM_
+>  (\update ->
+>     update ids)
+>  updates
 
 >doLoudSourceModification
 >  ::
@@ -105,12 +143,10 @@
 >   sortBy
 >    (\(SourceID id) (SourceID id1)-> id `compare` id1)
 >    ids
-> in do
-> mapM
->  (\update ->
->     update sortedIDs)
+> in
+> unsafeUnsortedDoLoudSourceModificationInternal
+>  sortedIDs
 >  updates
-> return ()
 
 >modifyLoudSource
 >  ::
@@ -135,14 +171,16 @@
 >  sourceID         = sourceID         ,
 >  updatesChan      = updatesChan      ,
 >  valuesChan       = valuesChan       ,
->  currentValueMVar = currentValueMVar
+>  currentValueMVar = currentValueMVar ,
+>  syncOnGet        = syncOnGet
 >  }
 > f
->  = 
+>  =
 > (sourceID,
 > (\sources -> do
 > v <- takeMVar currentValueMVar
-> v' <- f v ;
+> v' <- syncOnGet v
+> v'' <- f v ;
 > atomically
 >  $ do
 >     writeTChan
@@ -152,6 +190,17 @@
 >      updatesChan
 >      (LoudSourceUpdate sources)
 > putMVar currentValueMVar v'))
+
+> -- | Use this to re-run syncOnGet.
+>touchLoudSource
+>  ::
+> LoudSource a ->
+> (SourceID, [SourceID] ->IO ())
+>touchLoudSource
+> loudSource
+>  =
+> modifyLoudSource loudSource id
+
 
 >withTChan
 >  ::
@@ -177,12 +226,12 @@
 > IO d
 
 >withLoudSource
-> LoudSource{
+> ls@(LoudSource{
 >  sourceID         = sourceID         ,
 >  updatesChan      = updatesChan      ,
 >  valuesChan       = valuesChan       ,
 >  currentValueMVar = currentValueMVar
->  }
+>  })
 > f
 >   =
 > do
@@ -199,11 +248,9 @@
 >   readMVar currentValueMVar
 
 >  return
->   $ f (LoudSource {
->         sourceID         = sourceID         ,
+>   $ f (ls{
 >         updatesChan      = dupedUpdatesChan ,
->         valuesChan       = dupedValuesChan  ,
->         currentValueMVar = currentValueMVar
+>         valuesChan       = dupedValuesChan
 >         },
 >        currentValue)
 

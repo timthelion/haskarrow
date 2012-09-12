@@ -7,6 +7,11 @@
 >import Control.Error.Util (note)
 >import Data.Functor
 >import Data.Maybe
+>import Control.Monad.Instances
+
+>import Debug.Trace
+
+We take a list of values, each of which may be DeReReEval but need not be.
 
 >resolveLoudSources ::
 > [Value a Unresolved] ->
@@ -17,6 +22,9 @@
 >resolveLoudSources
 > values
 >   =
+
+For each value, we resolve it's sources.
+
 > mapM
 >  (resolveLoudSourcesForValue values)
 >  values
@@ -28,6 +36,9 @@
 >  Error
 >  (Value a Resolved)
 
+But only if it has any, aka, it is a DeReReEval value with a
+non-empty list of influences.
+
 >resolveLoudSourcesForValue
 > values
 > value@Value{
@@ -37,6 +48,35 @@
 >                timeOfEvaluation = DeReReEval}}
 >  =
 > let
+
+First we gather a shallow tree of source listener pairings. Where the listeners are the influences of this value:
+
+Say we have:
+
+source1 =% 1
+
+source2 =% 2
+
+listener1 <!> source2 =% source2+2
+
+listener2 <!> source1 listener1 =% source1 + linstener1
+
+
+And we are resolving the influences for listener2.
+
+Before we resolve these influences we have a naive list like:
+
+influences = ["source1","listener1"]
+
+We want to actually listen to changes that happen at the source level, rather than at the listener level. This is to prevent duplicate updates.
+
+So we want to change our naive list of influences into:
+
+[Influence (Source (SourceID,"source1")) [],
+ Influence (Source (SourceID,"source2")) ["listener1"]]
+
+This is necesary because we want listener2 to only actually listen to source1 and source2 and not listener1.  This way, if two listeners which listener2 is influenced by are updated by the same source, for each actual update we are only updated once!
+
 >  ungroupedSources ::
 >   Either
 >    Error
@@ -48,45 +88,58 @@
 >     findSources
 >     influences
 
+Finding the actual sources to a given value is a recursive task. First we go down our list of influences.  And we add those influences which are sources to our list.  But then, we also must look at those influences which are themselves listeners, and search their influences for sources, ad infinitum.  REALLY ad infinitum if we have recursive listening!
+
 >  findSources ::
 >   String ->
 >   Either
 >    Error
 >    [Influence]
 
+For each influence which is a listener, find it's sources. Noting, that it may itself have multiple sources.
+
 >  findSources
 >   influences
 >    =
->   (map
->    (\source ->
->       Influence
->        (Source (SourceID 0,source))
->        [influences]))
->       <$>
->    (findSources' influences)
+>   concat
+>    <$>
+>   mapM
+>     (\influence ->
+>        findSources'
+>         influence
+>         influence)
+>     influences
+
 
 >  findSources' ::
 >   String ->
+>   String ->
 >   Either
 >    Error
->    [String]
+>    [Influence]
 
 >  findSources'
+>   origionalInfluence
+>   -- ^ This is a recursive funciton.  We keep track of the origional influence so that we can check if we are recusing infinitely.
 >   influence
 >     =
 >   do
 >    found <- note
->     ("")
+>     ("Error: node declared to listen to non-existant value:"++influence)
 >     $ find
 >        (\value -> valueName value == influence)
 >        values
+
+If this influence is itself a source, then we are done processing it.
 
 >    case found of
 >     Value{
 >      listenerInfluences=(UnresolvedInfluences []),
 >      valueVariety=ValueVariety
 >       {timeOfEvaluation=DeReReEval}} ->
->        Right [influence]
+>        Right [Influence (Source (SourceID 0,influence)) []]
+
+If it is a listener however, we must find IT's sources.
 
 >     Value{
 >      listenerInfluences=(UnresolvedInfluences influencesOfInfluence),
@@ -95,10 +148,18 @@
 >       concat
 >         <$>
 >        mapM
->         findSources'
+>         (findSources' origionalInfluence)
 >         influencesOfInfluence
 >     _ ->
 >      Left ("Cannot listen to " ++ influence ++ "it is not a loud object.")
+
+But even the ungroupedSources function is too naive.  It does not group our new pairings  So we will end up with cases like:
+
+[Influence (Source (SourceID,"source1")) [],
+ Influence (Source (SourceID,"source2")) ["listener1"],
+ Influence (Source (SourceID,"source2")) ["listener3"]]
+
+The grouped sources function deals with this issue.
 
 >  groupedSources ::
 >   [Influence] ->
@@ -120,13 +181,30 @@
 >               `compare`
 >          sourceName influence2)
 >       ungroupedInfluences
+
+The groupBy above gives us a list like:
+
+[Influence (Source (SourceID,"source2")) ["listener1"],
+ Influence (Source (SourceID,"source2")) ["listener3"]]
+
+And flattenGroup gives us a list like:
+
+Influence (Source (SourceID,"source2")) ["listener1","listener3"]]
+
 >  flattenGroup ::
 >   [Influence] ->
 >   Influence
 >  flattenGroup
 >   influences@(influence:_)
 >    =
->   Influence{source=lookUpSource (sourceName influence) (sources values),
+
+>   Influence{source=
+
+We look up the source in our special list of sources which have unique SourceID's attached.  Before we had just filled this number with 0.
+
+>              lookUpSource
+>               (sourceName influence)
+>               (sources values),
 >    dependentInfluences=
 >     concatMap
 >      dependentInfluences

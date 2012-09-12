@@ -33,7 +33,8 @@ library
   errors     >0    ,
   stm        >=2.4
  Extensions: NamedFieldPuns,EmptyDataDecls, GADTs, EmptyDataDecls
- 
+ ghc-options: -rtsopts -fprof-auto
+
 Executable haskarrowPrecompiler
  build-depends:
   base<5,
@@ -42,6 +43,7 @@ Executable haskarrowPrecompiler
   cmdargs    >=0.9.5
  Main-is: haskarrowPrecompiler.lhs
  Extensions: DeriveDataTypeable, GADTs
+ ghc-options: -rtsopts -fprof-auto
 
 source-repository head
  type:    git 
